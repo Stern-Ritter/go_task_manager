@@ -2,17 +2,19 @@ package app
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi"
+	"go.uber.org/zap"
+
 	"github.com/Stern-Ritter/go_task_manager/internal/config"
 	"github.com/Stern-Ritter/go_task_manager/internal/service"
 	"github.com/Stern-Ritter/go_task_manager/internal/storage"
-	"github.com/go-chi/chi"
-	"go.uber.org/zap"
 
 	_ "modernc.org/sqlite"
 )
@@ -21,22 +23,24 @@ func Run(config *config.ServerConfig, logger *zap.Logger) error {
 	appPath, err := os.Getwd()
 	if err != nil {
 		logger.Fatal(err.Error(), zap.String("event", "get absolute path for current process"))
-		return err
+		return fmt.Errorf("error while get absolute path for current process: %w", err)
 	}
 
 	db, err := sql.Open(config.DatabaseDriverName, config.DatabaseFile)
 	if err != nil {
 		logger.Fatal(err.Error(), zap.String("event", "open database connection"))
-		return err
+		return fmt.Errorf("error while open database connection: %w", err)
 	}
 	defer db.Close()
 
-	needInitDataBase := !isDatabaseExists(appPath, config.DatabaseFile)
-	if needInitDataBase {
+	databaseNotExistsErr := isDatabaseExists(appPath, config.DatabaseFile)
+	if databaseNotExistsErr != nil {
+		logger.Error("database does not exists", zap.String("path", appPath), zap.String("file", config.DatabaseFile),
+			zap.Error(databaseNotExistsErr))
 		err = initDatabase(db, filepath.Join(appPath, "/resources/database/init.sql"))
 		if err != nil {
 			logger.Fatal(err.Error(), zap.String("event", "init database schema"))
-			return err
+			return fmt.Errorf("error while init database schema: %w", err)
 		}
 	}
 
@@ -47,11 +51,16 @@ func Run(config *config.ServerConfig, logger *zap.Logger) error {
 
 	url := strings.Join([]string{"", strconv.Itoa(config.Port)}, ":")
 	r := addRoutes(server, appPath)
+
+	server.Logger.Info("starting server", zap.String("url", url))
 	err = http.ListenAndServe(url, r)
+
 	if err != nil {
 		server.Logger.Fatal(err.Error(), zap.String("event", "start server"))
+		return fmt.Errorf("error while start server: %w", err)
 	}
-	return err
+
+	return nil
 }
 
 func addRoutes(s *service.Server, appPath string) *chi.Mux {
@@ -95,19 +104,22 @@ func fileServer(r chi.Router, path string, root http.FileSystem) {
 	})
 }
 
-func isDatabaseExists(path string, dataBaseName string) bool {
+func isDatabaseExists(path string, dataBaseName string) error {
 	dbFile := filepath.Join(path, dataBaseName)
 	_, err := os.Stat(dbFile)
-	return err == nil
+	return err
 }
 
 func initDatabase(db *sql.DB, initScriptPath string) error {
 	data, err := os.ReadFile(initScriptPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("error while reading init script: %w", err)
 	}
 
 	initScript := string(data)
 	_, err = db.Exec(initScript)
-	return err
+	if err != nil {
+		return fmt.Errorf("error while execution init script: %w", err)
+	}
+	return nil
 }

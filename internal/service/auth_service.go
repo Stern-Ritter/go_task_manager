@@ -4,8 +4,9 @@ import (
 	"github.com/Stern-Ritter/go_task_manager/internal/errors"
 	"github.com/Stern-Ritter/go_task_manager/internal/utils"
 
-	"github.com/Stern-Ritter/go_task_manager/internal/model"
 	"go.uber.org/zap"
+
+	"github.com/Stern-Ritter/go_task_manager/internal/model"
 )
 
 type AuthService struct {

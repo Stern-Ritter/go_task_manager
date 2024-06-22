@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
+
+	"go.uber.org/zap"
 
 	"github.com/Stern-Ritter/go_task_manager/internal/model"
 )
@@ -12,13 +15,15 @@ func (s *Server) SignInHandler(res http.ResponseWriter, req *http.Request) {
 	authReq := model.AuthRequestDto{}
 	dec := json.NewDecoder(req.Body)
 	if err := dec.Decode(&authReq); err != nil {
-		sendAuthError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error decoding auth request", zap.Error(err))
+		sendAuthError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	token, err := s.AuthService.SignIn(authReq)
 	if err != nil {
-		sendAuthError(res, http.StatusUnauthorized, err)
+		s.Logger.Error("Error signing in", zap.Error(err))
+		sendAuthError(res, http.StatusUnauthorized, err.Error())
 		return
 	}
 
@@ -29,6 +34,7 @@ func (s *Server) SignInHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	enc := json.NewEncoder(res)
 	if err := enc.Encode(authSuccesDto); err != nil {
+		s.Logger.Error("Error encoding auth response", zap.Error(err))
 		http.Error(res, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -41,13 +47,15 @@ func (s *Server) GetNextDateHandler(res http.ResponseWriter, req *http.Request) 
 
 	next, err := s.TaskService.GetNextDate(now, date, repeat)
 	if err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error getting next date for task", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	res.Header().Set("Content-Type", "text/plain")
 	_, err = io.WriteString(res, next)
 	if err != nil {
+		s.Logger.Error("Error writing get next date for task response", zap.Error(err))
 		http.Error(res, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -57,13 +65,15 @@ func (s *Server) AddTaskHandler(res http.ResponseWriter, req *http.Request) {
 	task := model.Task{}
 	dec := json.NewDecoder(req.Body)
 	if err := dec.Decode(&task); err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error decoding add task", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	id, err := s.TaskService.AddTask(task)
 	if err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error adding task", zap.Error(err))
+		sendTaskError(res, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -74,6 +84,7 @@ func (s *Server) AddTaskHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	enc := json.NewEncoder(res)
 	if err := enc.Encode(succesDto); err != nil {
+		s.Logger.Error("Error encoding add task response", zap.Error(err))
 		http.Error(res, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -83,13 +94,15 @@ func (s *Server) UpdateTaskHandler(res http.ResponseWriter, req *http.Request) {
 	task := model.Task{}
 	dec := json.NewDecoder(req.Body)
 	if err := dec.Decode(&task); err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error decoding update task", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	err := s.TaskService.UpdateTask(task)
 	if err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error updating task", zap.Error(err))
+		sendTaskError(res, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -98,6 +111,7 @@ func (s *Server) UpdateTaskHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	enc := json.NewEncoder(res)
 	if err := enc.Encode(succesDto); err != nil {
+		s.Logger.Error("Error encoding update task response", zap.Error(err))
 		http.Error(res, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -106,9 +120,17 @@ func (s *Server) UpdateTaskHandler(res http.ResponseWriter, req *http.Request) {
 func (s *Server) CompleteTaskHandler(res http.ResponseWriter, req *http.Request) {
 	id := req.FormValue("id")
 
-	err := s.TaskService.CompleteTask(id)
+	idNumber, err := strconv.Atoi(id)
 	if err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error parsing complete task id", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = s.TaskService.CompleteTask(idNumber)
+	if err != nil {
+		s.Logger.Error("Error completing task", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -117,6 +139,7 @@ func (s *Server) CompleteTaskHandler(res http.ResponseWriter, req *http.Request)
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	enc := json.NewEncoder(res)
 	if err := enc.Encode(succesDto); err != nil {
+		s.Logger.Error("Error encoding complete task response", zap.Error(err))
 		http.Error(res, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -125,9 +148,17 @@ func (s *Server) CompleteTaskHandler(res http.ResponseWriter, req *http.Request)
 func (s *Server) DeleteTaskHandler(res http.ResponseWriter, req *http.Request) {
 	id := req.FormValue("id")
 
-	err := s.TaskService.DeleteTask(id)
+	idNumber, err := strconv.Atoi(id)
 	if err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error parsing delete task id", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = s.TaskService.DeleteTask(idNumber)
+	if err != nil {
+		s.Logger.Error("Error deleting task", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -136,6 +167,7 @@ func (s *Server) DeleteTaskHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	enc := json.NewEncoder(res)
 	if err := enc.Encode(succesDto); err != nil {
+		s.Logger.Error("Error encoding delete task response", zap.Error(err))
 		http.Error(res, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -146,7 +178,8 @@ func (s *Server) GetTasksHandler(res http.ResponseWriter, req *http.Request) {
 
 	tasks, err := s.TaskService.GetTasks(search)
 	if err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error getting tasks", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -157,6 +190,7 @@ func (s *Server) GetTasksHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	enc := json.NewEncoder(res)
 	if err := enc.Encode(tasksDto); err != nil {
+		s.Logger.Error("Error encoding get tasks response", zap.Error(err))
 		http.Error(res, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -165,9 +199,17 @@ func (s *Server) GetTasksHandler(res http.ResponseWriter, req *http.Request) {
 func (s *Server) GetTaskHandler(res http.ResponseWriter, req *http.Request) {
 	id := req.FormValue("id")
 
-	task, err := s.TaskService.GetTask(id)
+	idNumber, err := strconv.Atoi(id)
 	if err != nil {
-		sendTaskError(res, http.StatusBadRequest, err)
+		s.Logger.Error("Error parsing get get task id", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	task, err := s.TaskService.GetTask(idNumber)
+	if err != nil {
+		s.Logger.Error("Error getting task", zap.Error(err))
+		sendTaskError(res, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -176,14 +218,15 @@ func (s *Server) GetTaskHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	enc := json.NewEncoder(res)
 	if err := enc.Encode(taskDto); err != nil {
+		s.Logger.Error("Error encoding get task response", zap.Error(err))
 		http.Error(res, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
 }
 
-func sendTaskError(res http.ResponseWriter, statusCode int, err error) {
+func sendTaskError(res http.ResponseWriter, statusCode int, msg string) {
 	errorDto := model.CreateTaskErrorDto{
-		Error: err.Error(),
+		Error: msg,
 	}
 
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -195,9 +238,9 @@ func sendTaskError(res http.ResponseWriter, statusCode int, err error) {
 	}
 }
 
-func sendAuthError(res http.ResponseWriter, statusCode int, err error) {
+func sendAuthError(res http.ResponseWriter, statusCode int, msg string) {
 	errorDto := model.AuthFailedDto{
-		Error: err.Error(),
+		Error: msg,
 	}
 
 	res.Header().Set("Content-Type", "application/json; charset=UTF-8")

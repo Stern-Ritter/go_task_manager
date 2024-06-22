@@ -1,8 +1,9 @@
 package service
 
 import (
-	"github.com/Stern-Ritter/go_task_manager/internal/config"
 	"go.uber.org/zap"
+
+	"github.com/Stern-Ritter/go_task_manager/internal/config"
 )
 
 type Server struct {

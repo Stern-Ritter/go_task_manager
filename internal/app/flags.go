@@ -3,8 +3,9 @@ package app
 import (
 	"flag"
 
-	"github.com/Stern-Ritter/go_task_manager/internal/config"
 	"github.com/caarlos0/env"
+
+	"github.com/Stern-Ritter/go_task_manager/internal/config"
 )
 
 func GetConfig(c config.ServerConfig) (config.ServerConfig, error) {
